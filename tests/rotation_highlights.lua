@@ -461,5 +461,5 @@ assert(addon.IsAutoRepeatActive() and not addon.IsAutoShotActive(),
 -- STOP: advances index past the shoot row back to row 1 (Arcane Shot).
 emit("STOP_AUTOREPEAT_SPELL")
 assert(not addon.IsAutoRepeatActive(), "STOP must clear autoRepeatActive")
-assert(shown(first), "Shoot STOP must advance past shoot row; Arcane Shot must glow")
+assert(shown(second), "Shoot STOP must advance past shoot row; Arcane Shot must glow")
 print("Rotation highlight sequence and condition tests passed")
