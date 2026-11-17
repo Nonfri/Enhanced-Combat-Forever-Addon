@@ -290,7 +290,7 @@ assert(shown(stance))
 attackable = false
 emit("PLAYER_TARGET_CHANGED")
 assert(not shown(stance) and not shown(first) and not shown(second) and indicatorSpell == nil)
-assert(addon.BuildRotationReport():find("Current row: 1", 1, true), "clearing target should reset the order")
+assert(addon.BuildRotationReport():find("Current row: 1 | Last cast row: 0", 1, true), "clearing target should reset the order")
 attackable = true
 emit("PLAYER_TARGET_CHANGED")
 assert(shown(stance), "retargeting should start at the opening ability")
@@ -375,4 +375,45 @@ addon.db.listeners = { { ability = "Stealth", enabled = true, conditions = {
 addon.UpdateRotationHighlights(true)
 assert(shown(stance) and indicatorSpell == 1784,
     "target-independent listener must glow without an active rotation profile")
+-- ---- runAfterPrevious ----
+-- Rotation: [Auto Shot, Arcane Shot(runAfterPrevious)]
+-- On a fresh target, Arcane Shot must be skipped because Auto Shot hasn't been cast yet.
+active = { name = "Order test", abilities = {
+    { ability = "Auto Shot", conditions = {} },
+    { ability = "Arcane Shot", conditions = { { type = "runAfterPrevious" } } },
+} }
+attackable, combat = true, false
+addon.UpdateRotationHighlights(true)
+assert(shown(first) and not shown(second), "runAfterPrevious must skip row 2 on fresh target")
+emit("UNIT_SPELLCAST_SUCCEEDED", "player", 75)
+assert(not shown(first) and shown(second), "after casting row 1, row 2 (runAfterPrevious) must become available")
+emit("UNIT_SPELLCAST_SUCCEEDED", "player", 3044)
+assert(shown(first) and not shown(second), "after casting row 2 the rotation loops back to row 1")
+-- runAfterPrevious on the first row always passes.
+active = { name = "Order first row", abilities = {
+    { ability = "Auto Shot", conditions = { { type = "runAfterPrevious" } } },
+    { ability = "Arcane Shot", conditions = {} },
+} }
+addon.UpdateRotationHighlights(true)
+assert(shown(first) and not shown(second), "runAfterPrevious on row 1 must always pass")
+
+-- ---- mustRunBeforeNext ----
+-- Rotation: [Auto Shot, Arcane Shot(mustRunBeforeNext + comboPoints>=5), Auto Shot(row 3)]
+-- When row 2 conditions fail (comboPoints=0), the rotation must restart at row 1
+-- instead of advancing to row 3. slot 2 stays as Arcane Shot so second only glows for row 2.
+active = { name = "MustRunBeforeNext skip test", abilities = {
+    { ability = "Auto Shot", conditions = {} },
+    { ability = "Arcane Shot", conditions = { { type = "mustRunBeforeNext" }, { type = "comboPoints", value = 5 } } },
+    { ability = "Auto Shot", conditions = {} },
+} }
+points = 0
+addon.UpdateRotationHighlights(true)
+emit("UNIT_SPELLCAST_SUCCEEDED", "player", 75)
+-- Now at row 2: comboPoints fails, mustRunBeforeNext resets to row 1 instead of advancing to row 3.
+assert(shown(first) and not shown(second), "mustRunBeforeNext: failed row must restart rotation at row 1, not skip to row 3")
+-- After gaining combo points, row 2 is castable.
+points = 5
+emit("UNIT_POWER_UPDATE", "player")
+emit("UNIT_SPELLCAST_SUCCEEDED", "player", 75)
+assert(shown(second), "after re-casting row 1, mustRunBeforeNext row must be highlighted when conditions pass")
 print("Rotation highlight sequence and condition tests passed")

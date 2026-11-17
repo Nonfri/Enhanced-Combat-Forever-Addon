@@ -19,6 +19,17 @@ local function attackableTarget()
 end
 
 local autoRepeatActive = false
+local lastCastIndex = 0
+
+local function entryHasConditionType(entry, condType)
+    if type(entry) ~= "table" then return false end
+    local conditions = entry.conditions
+    if type(conditions) ~= "table" then return false end
+    for _, c in ipairs(conditions) do
+        if c.type == condType then return true end
+    end
+    return false
+end
 
 local function isAutoRepeatActive()
     return autoRepeatActive
@@ -37,6 +48,7 @@ local function currentSpell()
         savedAbilities = active and active.abilities
         index = 1
         waitRemaining = 0
+        lastCastIndex = 0
         if addon.ResetListenerState then addon.ResetListenerState() end
     end
     -- Cast success can arrive before combo points and other resources update.
@@ -61,18 +73,32 @@ local function currentSpell()
         listenerOwnsStep = owns
         if owns then return info end
     end
-    -- Visit each row at most once, so an all-false profile cannot spin forever.
+    -- Visit at most #savedAbilities rows total to prevent infinite loops.
     for _ = 1, savedAbilities and #savedAbilities or 0 do
         local entry = savedAbilities[index]
-        local passes = addon.EvaluateRotationEntry(entry, targetReady)
-        if passes == nil then return end -- Unreadable condition: wait rather than guess.
-        if passes then
-            local ability = type(entry) == "table" and entry.ability or entry
-            local ok, info = pcall(C_Spell.GetSpellInfo, tonumber(ability) or ability)
-            if ok and readable(info) and type(info) == "table" then return info end
-            return
+        local thisIndex = index
+
+        -- runAfterPrevious: skip if the previous ability wasn't the last cast (first row always passes).
+        if thisIndex > 1 and entryHasConditionType(entry, "runAfterPrevious")
+            and lastCastIndex ~= thisIndex - 1 then
+            index = index % #savedAbilities + 1
+        else
+            local passes = addon.EvaluateRotationEntry(entry, targetReady)
+            if passes == nil then return end -- Unreadable condition: wait rather than guess.
+            if passes then
+                local ability = type(entry) == "table" and entry.ability or entry
+                local ok, info = pcall(C_Spell.GetSpellInfo, tonumber(ability) or ability)
+                if ok and readable(info) and type(info) == "table" then return info end
+                return
+            end
+            -- mustRunBeforeNext: restart from row 1 instead of advancing.
+            -- Don't return — let the loop continue so row 1 can be highlighted immediately.
+            if entryHasConditionType(entry, "mustRunBeforeNext") then
+                index = 1
+            else
+                index = index % #savedAbilities + 1
+            end
         end
-        index = index % #savedAbilities + 1
     end
     if not targetReady then index = 1 end
 end
@@ -137,7 +163,7 @@ end
 
 function addon.UpdateRotationHighlights(reset)
     if reset then
-        index = 1; waitRemaining = 0; listenerOwnsStep = false
+        index = 1; waitRemaining = 0; listenerOwnsStep = false; lastCastIndex = 0
         if addon.ResetListenerState then addon.ResetListenerState() end
     end
     local expected = currentSpell()
@@ -185,6 +211,7 @@ events:SetScript("OnEvent", function(_, event, unit, _, spellID)
                 addon.CompleteCurrentListener()
                 listenerOwnsStep = false
             else
+                lastCastIndex = index
                 index = index % #savedAbilities + 1
             end
             waitRemaining = POST_CAST_WAIT
@@ -254,7 +281,7 @@ function addon.BuildRotationReport()
         "Active profile: " .. (active and active.name or "none"),
         "In combat: " .. text(UnitAffectingCombat("player")),
         "Attackable living target: " .. text(attackableTarget()),
-        "Current row: " .. index,
+        "Current row: " .. index .. " | Last cast row: " .. lastCastIndex,
         "Current ability: " .. (selected and text(selected.name) or "none / waiting"),
         "Active listener: " .. (addon.CurrentListenerAbility and addon.CurrentListenerAbility() or "none"),
         "Post-cast wait: " .. string.format("%.2fs", waitRemaining),
