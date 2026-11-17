@@ -170,6 +170,7 @@ end
 function addon.UpdateRotationHighlights(reset)
     if reset then
         index = 1; waitRemaining = 0; listenerOwnsStep = false; lastCastIndex = 0; autoShotActive = false
+        addon.cachedRangedRange = nil; addon.cachedMeleeRange = nil
         if addon.ResetListenerState then addon.ResetListenerState() end
     end
     local expected = currentSpell()
@@ -279,6 +280,7 @@ events:SetScript("OnUpdate", function(_, delta)
     elapsed = elapsed + delta
     if elapsed >= 0.15 then
         elapsed = 0
+        if addon.UpdateRangeMonitors then addon.UpdateRangeMonitors() end
         addon.UpdateRotationHighlights()
     end
 end)
@@ -330,8 +332,10 @@ function addon.BuildRotationReport()
                 or table.concat((function()
                     local parts = {}
                     for _, c in ipairs(conditions) do
+                        local result = addon.EvaluateRotationCondition(c, ability)
                         parts[#parts + 1] = c.type
                             .. (c.operator and (" " .. c.operator .. " " .. text(c.value)) or "")
+                            .. "=" .. text(result)
                     end
                     return parts
                 end)(), " AND ")
@@ -339,6 +343,12 @@ function addon.BuildRotationReport()
         end
     end
     lines[#lines + 1] = "\nSaved listeners:"
+    local rangedProbe = addon.db and addon.db.rangedRangeAbility or ""
+    local meleeProbe = addon.db and addon.db.meleeRangeAbility or ""
+    lines[#lines + 1] = "Ranged range probe: " .. (rangedProbe ~= "" and rangedProbe or "(none)")
+        .. " | inRange=" .. text(addon.cachedRangedRange)
+    lines[#lines + 1] = "Melee range probe:  " .. (meleeProbe ~= "" and meleeProbe or "(none)")
+        .. " | inRange=" .. text(addon.cachedMeleeRange)
     local listenerDiagnostics = addon.GetListenerDiagnostics and addon.GetListenerDiagnostics(attackableTarget()) or {}
     if #listenerDiagnostics == 0 then lines[#lines + 1] = "none" end
     for _, listener in ipairs(listenerDiagnostics) do

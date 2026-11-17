@@ -154,6 +154,8 @@ function addon.EvaluateRotationCondition(condition, ability)
             or issecretvalue(info.spellID) or type(info.spellID) ~= "number" then return nil end
         return addon.CheckAbilityRange(info.spellID)
     end
+    if condition.type == "atRangedRange" then return addon.cachedRangedRange end
+    if condition.type == "atMeleeRange" then return addon.cachedMeleeRange end
     if condition.type ~= "comboPoints" or not addon.SupportsComboPointConditions() then return false end
     local ok, points = pcall(UnitPower, "player", Enum.PowerType.ComboPoints)
     if not ok or issecretvalue(points) or type(points) ~= "number" then return nil end

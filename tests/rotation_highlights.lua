@@ -1,4 +1,4 @@
-local addon = { db = {} }
+local addon = { db = { rangedRangeAbility = "", meleeRangeAbility = "" } }
 SlashCmdList = {}
 local indicatorSpell
 addon.db.dynamicIndicator = true
@@ -71,6 +71,22 @@ assert(loadfile("EnhancedCombatForever/Rotations.lua"))("EnhancedCombatForever",
 assert(loadfile("EnhancedCombatForever/Listeners.lua"))("EnhancedCombatForever", addon)
 function addon.GetActiveRotationProfile() return active end
 function addon.CheckAbilityRange() return candidateRange end
+addon.cachedRangedRange = nil
+addon.cachedMeleeRange = nil
+function addon.UpdateRangeMonitors()
+    local rangedID = addon.db and addon.db.rangedRangeAbility
+    if rangedID and rangedID ~= "" then
+        addon.cachedRangedRange = addon.CheckAbilityRange(rangedID)
+    else
+        addon.cachedRangedRange = nil
+    end
+    local meleeID = addon.db and addon.db.meleeRangeAbility
+    if meleeID and meleeID ~= "" then
+        addon.cachedMeleeRange = addon.CheckAbilityRange(meleeID)
+    else
+        addon.cachedMeleeRange = nil
+    end
+end
 local first, second = frame(), frame()
 first.action, second.action = 1, 2
 ActionBarButtonEventsFrame = { ForEachFrame = function(_, callback) callback(first); callback(second) end }
@@ -462,4 +478,18 @@ assert(addon.IsAutoRepeatActive() and not addon.IsAutoShotActive(),
 emit("STOP_AUTOREPEAT_SPELL")
 assert(not addon.IsAutoRepeatActive(), "STOP must clear autoRepeatActive")
 assert(shown(second), "Shoot STOP must advance past shoot row; Arcane Shot must glow")
+-- UpdateRangeMonitors: clears cache on target-change reset
+addon.cachedRangedRange = true
+addon.cachedMeleeRange = true
+emit("PLAYER_TARGET_CHANGED")
+assert(addon.cachedRangedRange == nil, "PLAYER_TARGET_CHANGED must nil cachedRangedRange")
+assert(addon.cachedMeleeRange == nil, "PLAYER_TARGET_CHANGED must nil cachedMeleeRange")
+
+-- UpdateRangeMonitors: no-op when db has no probe configured
+addon.db.rangedRangeAbility = ""
+addon.db.meleeRangeAbility = ""
+addon.UpdateRangeMonitors()
+assert(addon.cachedRangedRange == nil, "empty probe must leave cache nil")
+assert(addon.cachedMeleeRange == nil, "empty probe must leave cache nil")
+
 print("Rotation highlight sequence and condition tests passed")

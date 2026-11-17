@@ -162,14 +162,52 @@ function addon.CreateListenersSettings(parent)
         b:SetSize(width or 120, 24); b:SetText(label)
         return b
     end
+    -- Range monitor probe inputs
+    local rangedLabel = root:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    rangedLabel:SetPoint("TOPLEFT", 16, -14); rangedLabel:SetText("Ranged range ability:")
+    local rangedInput = CreateFrame("EditBox", nil, root, "InputBoxTemplate")
+    rangedInput:SetPoint("TOPLEFT", 160, -8); rangedInput:SetSize(200, 24)
+    rangedInput:SetAutoFocus(false); rangedInput:SetMaxLetters(100)
+    rangedInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    local meleeLabel = root:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    meleeLabel:SetPoint("TOPLEFT", 16, -46); meleeLabel:SetText("Melee range ability:")
+    local meleeInput = CreateFrame("EditBox", nil, root, "InputBoxTemplate")
+    meleeInput:SetPoint("TOPLEFT", 160, -40); meleeInput:SetSize(200, 24)
+    meleeInput:SetAutoFocus(false); meleeInput:SetMaxLetters(100)
+    meleeInput:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    local probeStatus = root:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    probeStatus:SetPoint("TOPLEFT", 140, -72); probeStatus:SetWidth(260); probeStatus:SetJustifyH("LEFT")
+    local probeChanged = function() probeStatus:SetText("Unsaved changes.") end
+    rangedInput:SetScript("OnTextChanged", function(_, userInput) if userInput then probeChanged() end end)
+    meleeInput:SetScript("OnTextChanged", function(_, userInput) if userInput then probeChanged() end end)
+    local probeSave = button(root, "Save probes", 120)
+    probeSave:SetPoint("TOPLEFT", 16, -68)
+    probeSave:SetScript("OnClick", function()
+        if not addon.db then return end
+        local rangedText = rangedInput:GetText():match("^%s*(.-)%s*$")
+        local meleeText = meleeInput:GetText():match("^%s*(.-)%s*$")
+        addon.db.rangedRangeAbility = rangedText
+        addon.db.meleeRangeAbility = meleeText
+        if addon.UpdateRangeMonitors then pcall(addon.UpdateRangeMonitors) end
+        probeStatus:SetText("Saved.")
+    end)
+    local function loadProbeInputs()
+        if not addon.db then return end
+        rangedInput:SetText(addon.db.rangedRangeAbility or "")
+        meleeInput:SetText(addon.db.meleeRangeAbility or "")
+        probeStatus:SetText("")
+    end
+    -- Populate inputs when the panel becomes visible.
+    root:SetScript("OnShow", loadProbeInputs)
+
     local add = button(root, "Add listener")
-    add:SetPoint("TOPLEFT", 16, -8)
+    add:SetPoint("TOPLEFT", 16, -108)
     local description = root:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    description:SetPoint("TOPLEFT", 16, -40)
-    description:SetPoint("TOPRIGHT", -34, -40); description:SetJustifyH("LEFT")
+    description:SetPoint("TOPLEFT", 16, -140)
+    description:SetPoint("TOPRIGHT", -34, -140); description:SetJustifyH("LEFT")
     description:SetText("All conditions must be met. First matching listener takes priority; cast its ability to resume.")
     local scroll = CreateFrame("ScrollFrame", nil, root, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 16, -80); scroll:SetPoint("BOTTOMRIGHT", -34, 12)
+    scroll:SetPoint("TOPLEFT", 16, -180); scroll:SetPoint("BOTTOMRIGHT", -34, 12)
     local content = CreateFrame("Frame", nil, scroll)
     content:SetSize(450, 1); scroll:SetScrollChild(content)
     scroll:SetScript("OnSizeChanged", function(_, width) content:SetWidth(math.max(100, width)) end)

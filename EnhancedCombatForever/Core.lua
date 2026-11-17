@@ -10,6 +10,8 @@ local rangeModeReady = false
 local meleeProbe
 local elapsed = 0
 local events = CreateFrame("Frame")
+addon.cachedRangedRange = nil
+addon.cachedMeleeRange = nil
 local indicator = CreateFrame("Frame", nil, UIParent)
 indicator:EnableMouse(false)
 indicator:Hide()
@@ -93,7 +95,8 @@ end
 -- Independent of the indicator's selected source, so rotation conditions can
 -- check a candidate without recursing through Dynamic Indicator selection.
 function addon.CheckAbilityRange(spellID)
-    if not C_SpellBook.IsSpellKnown(spellID) then return nil end
+    local knownOK, known = pcall(C_SpellBook.IsSpellKnown, spellID)
+    if not knownOK or not known then return nil end
     local isMelee, kind = addon.UsesMeleeRange(spellID)
     if isMelee == nil then return nil end
     local ok, value
@@ -200,6 +203,24 @@ function addon.Refresh()
     attachTarget()
 end
 
+local function resolveProbeID(raw)
+    if not raw or raw == "" then return nil end
+    local id = tonumber(raw)
+    if id then return id end
+    local ok, info = pcall(C_Spell.GetSpellInfo, raw)
+    if not ok or issecretvalue(info) or type(info) ~= "table"
+        or issecretvalue(info.spellID) or type(info.spellID) ~= "number" then return nil end
+    return info.spellID
+end
+
+function addon.UpdateRangeMonitors()
+    if not addon.db then return end
+    local rangedID = resolveProbeID(addon.db.rangedRangeAbility)
+    addon.cachedRangedRange = rangedID and addon.CheckAbilityRange(rangedID) or nil
+    local meleeID = resolveProbeID(addon.db.meleeRangeAbility)
+    addon.cachedMeleeRange = meleeID and addon.CheckAbilityRange(meleeID) or nil
+end
+
 function addon.RefreshIndicatorSource()
     if not addon.db then return end
     if resolveIndicatorSpell() ~= indicatorSpellID then
@@ -225,6 +246,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
         addon.db.size = math.max(8, math.min(48, addon.db.size))
         addon.db.offsetX = math.max(-200, math.min(200, addon.db.offsetX))
         addon.db.offsetY = math.max(-200, math.min(200, addon.db.offsetY))
+        if type(addon.db.rangedRangeAbility) ~= "string" then addon.db.rangedRangeAbility = "" end
+        if type(addon.db.meleeRangeAbility) ~= "string" then addon.db.meleeRangeAbility = "" end
         addon.CreateSettings()
         addon.Refresh()
         return
