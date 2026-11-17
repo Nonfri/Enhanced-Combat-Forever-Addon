@@ -10,6 +10,8 @@ local rangeModeReady = false
 local meleeProbe
 local elapsed = 0
 local events = CreateFrame("Frame")
+addon.cachedRangedRange = nil
+addon.cachedMeleeRange = nil
 local indicator = CreateFrame("Frame", nil, UIParent)
 indicator:EnableMouse(false)
 indicator:Hide()
@@ -200,6 +202,22 @@ function addon.Refresh()
     attachTarget()
 end
 
+function addon.UpdateRangeMonitors()
+    if not addon.db then return end
+    local rangedID = addon.db.rangedRangeAbility
+    if rangedID and rangedID ~= "" then
+        addon.cachedRangedRange = addon.CheckAbilityRange(tonumber(rangedID) or rangedID)
+    else
+        addon.cachedRangedRange = nil
+    end
+    local meleeID = addon.db.meleeRangeAbility
+    if meleeID and meleeID ~= "" then
+        addon.cachedMeleeRange = addon.CheckAbilityRange(tonumber(meleeID) or meleeID)
+    else
+        addon.cachedMeleeRange = nil
+    end
+end
+
 function addon.RefreshIndicatorSource()
     if not addon.db then return end
     if resolveIndicatorSpell() ~= indicatorSpellID then
@@ -225,6 +243,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
         addon.db.size = math.max(8, math.min(48, addon.db.size))
         addon.db.offsetX = math.max(-200, math.min(200, addon.db.offsetX))
         addon.db.offsetY = math.max(-200, math.min(200, addon.db.offsetY))
+        if type(addon.db.rangedRangeAbility) ~= "string" then addon.db.rangedRangeAbility = "" end
+        if type(addon.db.meleeRangeAbility) ~= "string" then addon.db.meleeRangeAbility = "" end
         addon.CreateSettings()
         addon.Refresh()
         return

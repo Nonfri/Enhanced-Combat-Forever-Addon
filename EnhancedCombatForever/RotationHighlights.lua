@@ -170,6 +170,7 @@ end
 function addon.UpdateRotationHighlights(reset)
     if reset then
         index = 1; waitRemaining = 0; listenerOwnsStep = false; lastCastIndex = 0; autoShotActive = false
+        addon.cachedRangedRange = nil; addon.cachedMeleeRange = nil
         if addon.ResetListenerState then addon.ResetListenerState() end
     end
     local expected = currentSpell()
@@ -279,6 +280,7 @@ events:SetScript("OnUpdate", function(_, delta)
     elapsed = elapsed + delta
     if elapsed >= 0.15 then
         elapsed = 0
+        if addon.UpdateRangeMonitors then addon.UpdateRangeMonitors() end
         addon.UpdateRotationHighlights()
     end
 end)

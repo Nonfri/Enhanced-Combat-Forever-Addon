@@ -134,4 +134,23 @@ local seen = {}
 for _, d in ipairs(choices) do seen[d.type] = true end
 assert(seen.always and seen.healthPercent and seen.healthNumber and seen.manaPercent
     and seen.ragePercent and seen.energyPercent and not seen.comboPoints)
+-- Range monitor condition tests
+addon.cachedRangedRange = nil
+assert(addon.EvaluateRotationCondition({ type = "atRangedRange" }) == nil, "nil cache must return nil (wait)")
+addon.cachedRangedRange = true
+assert(addon.EvaluateRotationCondition({ type = "atRangedRange" }) == true, "cached true must pass")
+addon.cachedRangedRange = false
+assert(addon.EvaluateRotationCondition({ type = "atRangedRange" }) == false, "cached false must fail")
+addon.cachedMeleeRange = nil
+assert(addon.EvaluateRotationCondition({ type = "atMeleeRange" }) == nil, "nil cache must return nil (wait)")
+addon.cachedMeleeRange = true
+assert(addon.EvaluateRotationCondition({ type = "atMeleeRange" }) == true, "cached true must pass")
+addon.cachedMeleeRange = false
+assert(addon.EvaluateRotationCondition({ type = "atMeleeRange" }) == false, "cached false must fail")
+local rangeChoices = addon.GetConditionChoices()
+local rangeTypes = {}
+for _, d in ipairs(rangeChoices) do rangeTypes[d.type] = true end
+assert(rangeTypes.atRangedRange, "atRangedRange must appear in condition choices")
+assert(rangeTypes.atMeleeRange, "atMeleeRange must appear in condition choices")
+print("Range monitor condition tests passed")
 print("Shared condition and numeric comparison tests passed")
