@@ -122,11 +122,11 @@ for _, invalid in ipairs({
 local normalized = assert(addon.ValidateCondition({ type = "healthNumber", value = "500", operator = "lt" }))
 assert(normalized.value == 500 and normalized.operator == "lt")
 local copied = addon.CopyRotationEntry({ ability = "Heal", condition = normalized })
-assert(copied.condition.operator == "lt")
+assert(copied.conditions[1].operator == "lt")
 local profile = { abilities = { copied } }
 assert(not addon.RotationDraftChanged(profile, { addon.CopyRotationEntry(copied) }))
 local draft = addon.CopyRotationEntry(copied)
-draft.condition.operator = "le"
+draft.conditions[1].operator = "le"
 assert(addon.RotationDraftChanged(profile, { draft }), "operator edits must count as unsaved changes")
 class = "HUNTER"
 local choices = addon.GetConditionChoices()

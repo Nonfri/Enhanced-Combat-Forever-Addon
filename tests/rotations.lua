@@ -155,6 +155,9 @@ click(find("Button", "Save", body))
 assert(profile.abilities[2].ability == "Eviscerate")
 assert(profile.abilities[2].conditions[1].type == "comboPoints"
     and profile.abilities[2].conditions[1].value == 5)
+-- After save, panels stay expanded as they were. Panel 2 (Eviscerate) was expanded
+-- before the save, so condRows are still accessible.
+assert(panels()[2].condRows[1], "condRows must survive a save")
 
 -- ---- Condition drafts must not mutate saved state ----
 typeText(panels()[2].condRows[1].controls.value, "4")

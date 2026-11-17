@@ -486,13 +486,18 @@ function addon.CreateRotationsSettings(parent)
             local ok, message = addon.SaveRotationProfile(profile, editor.draft)
             editor.status:SetText(message)
             if ok then
+                -- Reload draft from the freshly saved profile without rebuilding panel frames,
+                -- so expansion state and condRows are preserved.
                 for i, ability in ipairs(profile.abilities) do
                     editor.draft[i] = addon.CopyRotationEntry(ability)
+                    if editor.panels[i] then
+                        local e = migrateEntry(ability)
+                        editor.panels[i].conditions = {}
+                        for j, c in ipairs(e.conditions or {}) do
+                            editor.panels[i].conditions[j] = addon.CopyCondition(c)
+                        end
+                    end
                 end
-                -- Rebuild panels from fresh draft.
-                for _, p in ipairs(editor.panels) do p.frame:Hide() end
-                editor.panels = {}
-                for i in ipairs(editor.draft) do createAbilityPanel(editor, i) end
                 layout()
             end
         end)
