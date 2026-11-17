@@ -188,7 +188,7 @@ function addon.CreateListenersSettings(parent)
         local meleeText = meleeInput:GetText():match("^%s*(.-)%s*$")
         addon.db.rangedRangeAbility = rangedText
         addon.db.meleeRangeAbility = meleeText
-        if addon.UpdateRangeMonitors then addon.UpdateRangeMonitors() end
+        if addon.UpdateRangeMonitors then pcall(addon.UpdateRangeMonitors) end
         probeStatus:SetText("Saved.")
     end)
     local function loadProbeInputs()
