@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "deploy": "node scripts/deploy.mjs",
-    "test:deploy": "node --test tests/deploy.test.mjs"
+    "test": "node --test tests/deploy.test.mjs"
   },
   "engines": {
     "node": ">=20"
