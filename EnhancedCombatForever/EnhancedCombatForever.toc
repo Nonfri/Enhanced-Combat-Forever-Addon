@@ -1,0 +1,14 @@
+## Interface: 16001
+## Title: Enhanced Combat Forever
+## Notes: Ability range indicator beside your current target's nameplate.
+## Version: 0.1.0
+## SavedVariablesPerCharacter: EnhancedCombatForeverDB
+
+Core.lua
+Conditions.lua
+Rotations.lua
+Listeners.lua
+RotationHighlights.lua
+Settings.lua
+Debug.lua
+SpellInspect.lua
