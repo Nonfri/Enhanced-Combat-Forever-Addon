@@ -516,7 +516,7 @@ function addon.CreateRotationsSettings(parent)
             local panelsHeight = 0
             for _, panel in ipairs(editor.panels) do
                 if panel.expanded then
-                    panelsHeight = panelsHeight + 32 + 42 + 36 + #panel.conditions * 34 + 8
+                    panelsHeight = panelsHeight + 144 + #panel.conditions * 34
                 else
                     panelsHeight = panelsHeight + 32
                 end
@@ -549,7 +549,7 @@ function addon.CreateRotationsSettings(parent)
 
                     local panelHeight
                     if panel.expanded then
-                        panelHeight = 32 + 42 + 36 + #panel.conditions * 34 + 8
+                        panelHeight = 144 + #panel.conditions * 34
                     else
                         panelHeight = 32
                     end
