@@ -440,14 +440,10 @@ assert(not shown(first) and shown(second), "while Auto Shot active, Auto Shot ro
 -- Auto Shot stops → autoShotActive clears, in combat → row 1 available again.
 emit("STOP_AUTOREPEAT_SPELL")
 assert(shown(first) and not shown(second), "when Auto Shot stops mid-combat, its row must become available again")
--- Out of combat: autoShotToggle returns false even when not active.
--- Row 2 (Arcane Shot, no conditions, no target independence override) would glow
--- if targetReady, but attackable=true here and no inRange condition means it's
--- target-dependent... actually no conditions means always passes when targetReady.
--- So just verify Auto Shot row (first) stays dark.
+-- Out of combat: autoShotToggle still highlights when Auto Shot is not active.
 combat = false
 emit("PLAYER_REGEN_ENABLED")
-assert(not shown(first), "autoShotToggle must not highlight Auto Shot outside of combat")
+assert(shown(first), "autoShotToggle must highlight Auto Shot outside of combat when not active")
 -- Shoot profile is unaffected: START_AUTOREPEAT_SPELL still uses autoRepeatActive (Shoot lock),
 -- not autoShotActive, because the profile has no autoShotToggle row.
 active = { name = "Shoot profile", abilities = {
