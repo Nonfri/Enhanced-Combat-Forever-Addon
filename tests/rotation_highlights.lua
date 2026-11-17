@@ -50,7 +50,8 @@ function issecretvalue(value) return value == secret end
 function UnitCanAttack() return attackable end
 function UnitExists() return attackable end
 function UnitIsDeadOrGhost() return dead end
-function GetActionInfo(action) return table.unpack(actionInfo[action] or {}) end
+local _unpack = table.unpack or unpack
+function GetActionInfo(action) return _unpack(actionInfo[action] or {}) end
 C_Spell = {
     GetSpellInfo = function(value)
         if value == "Auto Shot" then return info[75] end
