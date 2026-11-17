@@ -332,8 +332,10 @@ function addon.BuildRotationReport()
                 or table.concat((function()
                     local parts = {}
                     for _, c in ipairs(conditions) do
+                        local result = addon.EvaluateRotationCondition(c, ability)
                         parts[#parts + 1] = c.type
                             .. (c.operator and (" " .. c.operator .. " " .. text(c.value)) or "")
+                            .. "=" .. text(result)
                     end
                     return parts
                 end)(), " AND ")
