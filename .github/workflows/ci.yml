@@ -78,15 +78,45 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     needs: [lua-tests, luacheck, toc-validate, node-tests]
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Fetch GitHub OIDC token
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken('https://api.anthropic.com');
+            core.setSecret(token);
+            core.exportVariable('JWT', token);
+
+      - name: Exchange for Anthropic access token
+        run: |
+          ANTHROPIC_ACCESS_TOKEN=$(curl -sS https://api.anthropic.com/v1/oauth/token \
+            -H "content-type: application/json" \
+            --data @- <<JSON | jq -r '.access_token'
+          {
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": "$JWT",
+            "federation_rule_id": "fdrl_01CErsT8iccNm87F8r8Bp6py",
+            "organization_id": "feeb679c-40c2-44ff-8ab8-f396a6938a77",
+            "service_account_id": "svac_01PoGNAaUBgFhcBm46AHSJqJ",
+            "workspace_id": "wrkspc_01ShSoa2cA7dYJHxaJZ3MtNN"
+          }
+          JSON
+          )
+          echo "::add-mask::$ANTHROPIC_ACCESS_TOKEN"
+          echo "ANTHROPIC_ACCESS_TOKEN=$ANTHROPIC_ACCESS_TOKEN" >> $GITHUB_ENV
 
       - name: Install Claude Code
         run: npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code
 
       - name: Run ultra code review
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_ACCESS_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           claude --dangerously-skip-permissions -p \
