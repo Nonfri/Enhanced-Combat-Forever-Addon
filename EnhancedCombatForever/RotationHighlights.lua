@@ -19,6 +19,7 @@ local function attackableTarget()
 end
 
 local autoRepeatActive = false
+local autoShotActive = false
 local lastCastIndex = 0
 
 local function entryHasConditionType(entry, condType)
@@ -39,6 +40,10 @@ function addon.IsAutoRepeatActive()
     return autoRepeatActive
 end
 
+function addon.IsAutoShotActive()
+    return autoShotActive
+end
+
 
 local function currentSpell()
     if not addon.db then return end
@@ -49,6 +54,7 @@ local function currentSpell()
         index = 1
         waitRemaining = 0
         lastCastIndex = 0
+        autoShotActive = false
         if addon.ResetListenerState then addon.ResetListenerState() end
     end
     -- Cast success can arrive before combo points and other resources update.
@@ -163,7 +169,7 @@ end
 
 function addon.UpdateRotationHighlights(reset)
     if reset then
-        index = 1; waitRemaining = 0; listenerOwnsStep = false; lastCastIndex = 0
+        index = 1; waitRemaining = 0; listenerOwnsStep = false; lastCastIndex = 0; autoShotActive = false
         if addon.ResetListenerState then addon.ResetListenerState() end
     end
     local expected = currentSpell()
@@ -218,15 +224,38 @@ events:SetScript("OnEvent", function(_, event, unit, _, spellID)
         end
         addon.UpdateRotationHighlights()
     elseif event == "START_AUTOREPEAT_SPELL" then
-        autoRepeatActive = true
+        -- Distinguish hunter-style Auto Shot (weave, don't lock) from wand Shoot (lock).
+        local hasAutoShot = false
+        if savedAbilities then
+            for _, entry in ipairs(savedAbilities) do
+                if entryHasConditionType(entry, "autoShotToggle") then hasAutoShot = true; break end
+            end
+        end
+        if hasAutoShot then
+            autoShotActive = true
+        else
+            autoRepeatActive = true
+        end
         addon.UpdateRotationHighlights()
     elseif event == "STOP_AUTOREPEAT_SPELL" then
-        autoRepeatActive = false
-        if savedAbilities then
-            for i, entry in ipairs(savedAbilities) do
-                if addon.RotationEntryIsShootRow(entry) then
-                    index = i % #savedAbilities + 1
-                    break
+        if autoShotActive then
+            autoShotActive = false
+            -- Point index back at the Auto Shot row so it highlights immediately.
+            if savedAbilities then
+                for i, entry in ipairs(savedAbilities) do
+                    if entryHasConditionType(entry, "autoShotToggle") then
+                        index = i; break
+                    end
+                end
+            end
+        else
+            autoRepeatActive = false
+            if savedAbilities then
+                for i, entry in ipairs(savedAbilities) do
+                    if addon.RotationEntryIsShootRow(entry) then
+                        index = i % #savedAbilities + 1
+                        break
+                    end
                 end
             end
         end
@@ -285,7 +314,7 @@ function addon.BuildRotationReport()
         "Current ability: " .. (selected and text(selected.name) or "none / waiting"),
         "Active listener: " .. (addon.CurrentListenerAbility and addon.CurrentListenerAbility() or "none"),
         "Post-cast wait: " .. string.format("%.2fs", waitRemaining),
-        "Auto-repeat active (Shoot gate): " .. tostring(isAutoRepeatActive()),
+        "Auto-repeat active (Shoot gate): " .. tostring(isAutoRepeatActive()) .. " | Auto Shot active: " .. tostring(autoShotActive),
         "Player health API: current=" .. (healthOK and text(playerHealth) or "[call failed]")
             .. " | max=" .. (maxHealthOK and text(playerHealthMax) or "[call failed]")
             .. " | percent=" .. (percentOK and text(playerHealthPercent) or "[call unavailable]"),
