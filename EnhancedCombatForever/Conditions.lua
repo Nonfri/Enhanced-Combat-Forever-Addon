@@ -18,6 +18,7 @@ local definitions = {
     { type = "shootToggleOff", label = "Shoot - Toggle off" },
     { type = "runAfterPrevious", label = "Run only after previous" },
     { type = "mustRunBeforeNext", label = "Must run before next" },
+    { type = "autoShotToggle", label = "Auto Shot - Toggle" },
 }
 local byType = {}
 for _, definition in ipairs(definitions) do byType[definition.type] = definition end

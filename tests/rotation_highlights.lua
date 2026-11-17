@@ -419,4 +419,47 @@ points = 5
 emit("UNIT_POWER_UPDATE", "player")
 emit("UNIT_SPELLCAST_SUCCEEDED", "player", 75)
 assert(shown(second), "after re-casting row 1, mustRunBeforeNext row must be highlighted when conditions pass")
+-- ---- autoShotToggle ----
+-- Rotation: [Auto Shot(autoShotToggle), Arcane Shot, Auto Shot(row 3)]
+-- actionInfo slot 1=Auto Shot(75), slot 2=Arcane Shot(3044).
+active = { name = "Auto Shot weave", abilities = {
+    { ability = "Auto Shot", conditions = { { type = "autoShotToggle" } } },
+    { ability = "Arcane Shot", conditions = {} },
+} }
+combat, attackable = true, true
+addon.UpdateRotationHighlights(true)
+-- In combat, Auto Shot not running → row 1 should glow.
+assert(shown(first) and not shown(second), "autoShotToggle must highlight Auto Shot when in combat and not active")
+-- Start auto-repeat: profile has autoShotToggle row → autoShotActive, not shoot lock.
+emit("START_AUTOREPEAT_SPELL")
+-- autoShotToggle returns false when active → row 1 skipped, rotation advances to row 2.
+assert(not shown(first) and shown(second), "after Auto Shot starts, rotation must advance to Arcane Shot")
+-- Casting Arcane Shot advances to row 1 again, but autoShotToggle returns false → skips, wraps.
+emit("UNIT_SPELLCAST_SUCCEEDED", "player", 3044)
+assert(not shown(first) and shown(second), "while Auto Shot active, Auto Shot row must stay skipped on wrap")
+-- Auto Shot stops → autoShotActive clears, in combat → row 1 available again.
+emit("STOP_AUTOREPEAT_SPELL")
+assert(shown(first) and not shown(second), "when Auto Shot stops mid-combat, its row must become available again")
+-- Out of combat: autoShotToggle still highlights when Auto Shot is not active.
+combat = false
+emit("PLAYER_REGEN_ENABLED")
+assert(shown(first), "autoShotToggle must highlight Auto Shot outside of combat when not active")
+-- Shoot profile is unaffected: START_AUTOREPEAT_SPELL still uses autoRepeatActive (Shoot lock),
+-- not autoShotActive, because the profile has no autoShotToggle row.
+active = { name = "Shoot profile", abilities = {
+    { ability = "Arcane Shot", conditions = {} },
+    { ability = "Shoot", conditions = { { type = "shootToggle" } } },
+} }
+combat, attackable = true, true
+addon.UpdateRotationHighlights(true)
+-- Advance to Shoot row.
+emit("UNIT_SPELLCAST_SUCCEEDED", "player", 3044)
+-- START_AUTOREPEAT_SPELL: profile has no autoShotToggle → autoRepeatActive path.
+emit("START_AUTOREPEAT_SPELL")
+assert(addon.IsAutoRepeatActive() and not addon.IsAutoShotActive(),
+    "Shoot profile must use autoRepeatActive, not autoShotActive")
+-- STOP: advances index past the shoot row back to row 1 (Arcane Shot).
+emit("STOP_AUTOREPEAT_SPELL")
+assert(not addon.IsAutoRepeatActive(), "STOP must clear autoRepeatActive")
+assert(shown(second), "Shoot STOP must advance past shoot row; Arcane Shot must glow")
 print("Rotation highlight sequence and condition tests passed")

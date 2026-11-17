@@ -100,6 +100,11 @@ function addon.CheckAbilityRange(spellID)
     if isMelee then
         value = meleeRange(findMeleeProbe(spellID, kind))
         ok = true
+        -- For next-swing abilities (e.g. Raptor Strike) when no probe ability is
+        -- found and the swing timer is unavailable, try IsSpellInRange directly.
+        if value == nil and kind == "swing" then
+            ok, value = pcall(C_Spell.IsSpellInRange, spellID, "target")
+        end
     elseif C_Spell.SpellHasRange(spellID) then
         ok, value = pcall(C_Spell.IsSpellInRange, spellID, "target")
     end
