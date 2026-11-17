@@ -243,7 +243,7 @@ function addon.CreateListenersSettings(parent)
             e.body:SetShown(e.expanded)
             for j = #e.conditions + 1, #e.rows do e.rows[j]:Hide() end
             if e.expanded then
-                for j, condition in ipairs(e.conditions) do
+                for j in ipairs(e.conditions) do
                     local row = e.rows[j] or conditionRow(e, j)
                     row:SetPoint("TOPLEFT", 0, -74 - (j - 1) * 34); row:SetPoint("TOPRIGHT", 0, -74 - (j - 1) * 34)
                     row.controls:Refresh()

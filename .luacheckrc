@@ -20,8 +20,13 @@ globals = {
     "UnitCanAttack", "UnitIsDeadOrGhost", "UnitExists", "UnitIsUnit",
     -- Action bar
     "GetActionInfo", "GetShapeshiftFormInfo",
-    -- Slash command prefix
+    -- Slash command prefixes (WoW registers these as globals)
     "SLASH_ENHANCEDCOMBATFOREVERROTATION1",
+    "SLASH_ENHANCEDCOMBATFOREVERDEBUG1",
+    "SLASH_ENHANCEDCOMBATFOREVER1",
+    "SLASH_ENHANCEDCOMBATFOREVERSPELL1",
+    -- Misc WoW globals
+    "GetBuildInfo", "UnitDistanceSquared", "ChatFontNormal",
     -- SavedVariables
     "EnhancedCombatForeverDB",
 }

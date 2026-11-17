@@ -228,7 +228,7 @@ function addon.CreateRotationsSettings(parent)
     local content = CreateFrame("Frame", nil, scroll)
     content:SetSize(450, 1)
     scroll:SetScrollChild(content)
-    scroll:SetScript("OnSizeChanged", function(self, width)
+    scroll:SetScript("OnSizeChanged", function(_, width)
         content:SetWidth(math.max(100, width))
     end)
 
