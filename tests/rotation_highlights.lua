@@ -376,6 +376,9 @@ addon.UpdateRotationHighlights(true)
 assert(shown(stance) and indicatorSpell == 1784,
     "target-independent listener must glow without an active rotation profile")
 -- ---- runAfterPrevious ----
+-- Clear listeners and stance bar from previous tests to isolate ordering tests.
+addon.db.listeners = {}
+StanceBar = nil
 -- Rotation: [Auto Shot, Arcane Shot(runAfterPrevious)]
 -- On a fresh target, Arcane Shot must be skipped because Auto Shot hasn't been cast yet.
 active = { name = "Order test", abilities = {
