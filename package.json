@@ -1,0 +1,12 @@
+{
+  "name": "enhanced-combat-forever-addon",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "deploy": "node scripts/deploy.mjs",
+    "test": "node --test tests/deploy.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

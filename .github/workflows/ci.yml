@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lua-tests:
+    name: Lua unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y lua5.1
+
+      - name: Run Lua test suites
+        run: lua5.1 tests/run_all.lua
+
+  luacheck:
+    name: Luacheck static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Luacheck
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y luarocks
+          sudo luarocks install luacheck
+
+      - name: Lint addon source
+        run: luacheck EnhancedCombatForever/
+
+  toc-validate:
+    name: TOC file integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check all TOC-listed files exist
+        run: |
+          TOC="EnhancedCombatForever/EnhancedCombatForever.toc"
+          MISSING=0
+          while IFS= read -r line; do
+            # Skip comments and metadata lines
+            [[ "$line" =~ ^## ]] && continue
+            [[ -z "${line// }" ]] && continue
+            FILE="EnhancedCombatForever/$line"
+            if [ ! -f "$FILE" ]; then
+              echo "MISSING: $FILE"
+              MISSING=1
+            else
+              echo "OK: $FILE"
+            fi
+          done < "$TOC"
+          exit $MISSING
+
+  node-tests:
+    name: Deploy script tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run deploy tests
+        run: npm test
