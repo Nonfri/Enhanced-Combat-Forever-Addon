@@ -213,7 +213,11 @@ click(find("Button", "Save", body))
 assert(#profile.abilities[1].conditions == 0)
 
 -- ---- Multi-condition: add two conditions to Eviscerate ----
--- panels()[2] should be Eviscerate at this point (after the reorder we saved earlier)
+-- panels()[2] is Eviscerate with the comboPoints condition from earlier. Remove it first.
+click(find("Button", "Delete", panels()[2].condRows[1]))
+click(find("Button", "Save", body))  -- save Eviscerate with empty conditions
+assert(#profile.abilities[2].conditions == 0, "cleared Eviscerate conditions must save")
+-- Now add two fresh conditions.
 click(panels()[2].addCondition)
 click(panels()[2].addCondition)
 assert(#panels()[2].conditions == 2, "must be able to add multiple conditions")
