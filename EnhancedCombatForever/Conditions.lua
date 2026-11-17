@@ -101,7 +101,7 @@ local function getAtLeastSecondsCurve(threshold)
         local epsilon = 0.001
         curve:AddPoint(0, 0)
         curve:AddPoint(math.max(0, point - epsilon), 0)
-        curve:AddPoint(point + epsilon, 100)
+        curve:AddPoint(math.min(86400, point + epsilon), 100)
         curve:AddPoint(86400, 100)
     end)
     secondsCurves[key] = ok and curve or false
@@ -208,7 +208,7 @@ function addon.EvaluateBuffRemainingCondition(condition, ability)
     if type(aura) ~= "table" or issecretvalue(aura.auraInstanceID)
         or type(aura.auraInstanceID) ~= "number" then return nil end
     local durationOK, duration = pcall(C_UnitAuras.GetAuraDuration, "player", aura.auraInstanceID)
-    if not durationOK or not duration then return nil end
+    if not durationOK or not duration or issecretvalue(duration) then return nil end
     local remainingOK, remaining = pcall(duration.GetRemainingDuration, duration)
     if remainingOK and not issecretvalue(remaining) and type(remaining) == "number" then
         return addon.CompareCondition(remaining, condition)

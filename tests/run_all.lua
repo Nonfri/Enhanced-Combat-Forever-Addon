@@ -8,6 +8,7 @@ local suites = {
     "tests/range_indicator.lua",
     "tests/settings_validation.lua",
     "tests/spell_inspection.lua",
+    "tests/debug_sample.lua",
 }
 
 local lua = arg and arg[-1] or "lua"

@@ -119,7 +119,7 @@ function addon.GetListenerSpell(targetReady)
                     if result == false then passes = false end
                     if result == nil then unknown = true end
                 end
-                if not passes then state.latched = false end
+                if not passes or unknown then state.latched = false end
                 local cooldownReady = listenerAbilityReady(listener.ability)
                 if passes and not unknown and not state.latched and cooldownReady == true
                     and (targetReady or allowsNoTarget(listener)) then
@@ -138,8 +138,8 @@ end
 function addon.SaveListener(listener, ability, conditions, enabled)
     ability = ability:match("^%s*(.-)%s*$")
     if ability == "" then return false, "Choose a learned ability." end
-    local info = C_Spell.GetSpellInfo(tonumber(ability) or ability)
-    if not info or not C_SpellBook.IsSpellKnown(info.spellID) then return false, "Choose a learned ability." end
+    local infoOK, info = pcall(C_Spell.GetSpellInfo, tonumber(ability) or ability)
+    if not infoOK or not info or not C_SpellBook.IsSpellKnown(info.spellID) then return false, "Choose a learned ability." end
     if #conditions == 0 then return false, "Add at least one condition." end
     local saved = {}
     for i, condition in ipairs(conditions) do
