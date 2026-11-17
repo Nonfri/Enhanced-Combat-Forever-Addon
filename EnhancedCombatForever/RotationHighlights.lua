@@ -346,9 +346,9 @@ function addon.BuildRotationReport()
     local rangedProbe = addon.db and addon.db.rangedRangeAbility or ""
     local meleeProbe = addon.db and addon.db.meleeRangeAbility or ""
     lines[#lines + 1] = "Ranged range probe: " .. (rangedProbe ~= "" and rangedProbe or "(none)")
-        .. " | cached=" .. text(addon.cachedRangedRange)
+        .. " | inRange=" .. text(addon.cachedRangedRange)
     lines[#lines + 1] = "Melee range probe:  " .. (meleeProbe ~= "" and meleeProbe or "(none)")
-        .. " | cached=" .. text(addon.cachedMeleeRange)
+        .. " | inRange=" .. text(addon.cachedMeleeRange)
     local listenerDiagnostics = addon.GetListenerDiagnostics and addon.GetListenerDiagnostics(attackableTarget()) or {}
     if #listenerDiagnostics == 0 then lines[#lines + 1] = "none" end
     for _, listener in ipairs(listenerDiagnostics) do
