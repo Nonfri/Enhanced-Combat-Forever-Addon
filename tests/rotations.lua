@@ -194,7 +194,6 @@ click(find("Button", "Save", body))
 assert(profile.abilities[1].conditions[1].type == "inRange")
 
 -- ---- Remove condition (delete condition row makes it always-cast) ----
-click(panels()[1].condRows[1].controls.value)  -- no-op via stub metatable
 -- Delete the condition row via its delete button
 local condRowDel = find("Button", "Delete", panels()[1].condRows[1])
 click(condRowDel)
@@ -208,7 +207,6 @@ chooseCondition(panels()[1].condRows[1], "outOfCombat")
 click(find("Button", "Save", body))
 assert(profile.abilities[1].conditions[1].type == "outOfCombat", "out-of-combat condition must save")
 
-click(panels()[1].condRows[1].controls.value)  -- no-op
 local condRowDel2 = find("Button", "Delete", panels()[1].condRows[1])
 click(condRowDel2)
 click(find("Button", "Save", body))
