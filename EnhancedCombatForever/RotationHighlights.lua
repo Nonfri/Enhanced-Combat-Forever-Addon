@@ -45,8 +45,7 @@ local function currentSpell()
     if isAutoRepeatActive() then
         if savedAbilities then
             for _, entry in ipairs(savedAbilities) do
-                local condition = type(entry) == "table" and entry.condition
-                if condition and (condition.type == "shootToggle" or condition.type == "shootToggleOff") then
+                if addon.RotationEntryIsShootRow(entry) then
                     local ability = type(entry) == "table" and entry.ability or entry
                     local ok, info = pcall(C_Spell.GetSpellInfo, tonumber(ability) or ability)
                     if ok and readable(info) and type(info) == "table" then return info end
@@ -65,13 +64,7 @@ local function currentSpell()
     -- Visit each row at most once, so an all-false profile cannot spin forever.
     for _ = 1, savedAbilities and #savedAbilities or 0 do
         local entry = savedAbilities[index]
-        local condition = type(entry) == "table" and entry.condition
-        local passes = true
-        if not targetReady and not (condition and condition.type == "noTarget") then
-            passes = false
-        elseif condition then
-            passes = addon.EvaluateRotationCondition(condition, entry.ability)
-        end
+        local passes = addon.EvaluateRotationEntry(entry, targetReady)
         if passes == nil then return end -- Unreadable condition: wait rather than guess.
         if passes then
             local ability = type(entry) == "table" and entry.ability or entry
@@ -92,7 +85,7 @@ end
 local function targetIndependentRow()
     if listenerOwnsStep then return addon.ListenerAllowsNoTarget() end
     local entry = savedAbilities and savedAbilities[index]
-    return type(entry) == "table" and entry.condition and entry.condition.type == "noTarget"
+    return entry ~= nil and addon.RotationEntryIsTargetIndependent(entry)
 end
 
 local function sameSpell(expected, id)
@@ -204,8 +197,7 @@ events:SetScript("OnEvent", function(_, event, unit, _, spellID)
         autoRepeatActive = false
         if savedAbilities then
             for i, entry in ipairs(savedAbilities) do
-                local condition = type(entry) == "table" and entry.condition
-                if condition and (condition.type == "shootToggle" or condition.type == "shootToggleOff") then
+                if addon.RotationEntryIsShootRow(entry) then
                     index = i % #savedAbilities + 1
                     break
                 end
@@ -273,13 +265,21 @@ function addon.BuildRotationReport()
         "\nSaved rows (unsaved editor changes are not used):",
     }
     if active then
-        for i, entry in ipairs(active.abilities) do
-            local ability = type(entry) == "table" and entry.ability or entry
-            local condition = type(entry) == "table" and entry.condition
-            local passes = true
-            if condition then passes = addon.EvaluateRotationCondition(condition, ability) end
-            lines[#lines + 1] = i .. ". " .. ability .. " | condition="
-                .. (condition and condition.type or "always") .. " | passes=" .. text(passes)
+        for i, rawEntry in ipairs(active.abilities) do
+            local entry = addon.GetMigratedEntry(rawEntry)
+            local ability = entry.ability or ""
+            local conditions = entry.conditions or {}
+            local passes = addon.EvaluateRotationEntry(entry, attackableTarget())
+            local condDesc = #conditions == 0 and "always"
+                or table.concat((function()
+                    local parts = {}
+                    for _, c in ipairs(conditions) do
+                        parts[#parts + 1] = c.type
+                            .. (c.operator and (" " .. c.operator .. " " .. text(c.value)) or "")
+                    end
+                    return parts
+                end)(), " AND ")
+            lines[#lines + 1] = i .. ". " .. ability .. " | conditions=[" .. condDesc .. "] | passes=" .. text(passes)
         end
     end
     lines[#lines + 1] = "\nSaved listeners:"

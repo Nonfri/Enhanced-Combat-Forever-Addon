@@ -224,7 +224,7 @@ addon.UpdateRotationHighlights()
 assert(not shown(first) and not shown(second) and indicatorSpell == nil, "unknown combat state must wait safely")
 combat = false
 local report = addon.BuildRotationReport()
-assert(report:find("condition=outOfCombat | passes=true", 1, true))
+assert(report:find("conditions=[outOfCombat] | passes=true", 1, true))
 assert(report:find("Current ability: Auto Shot", 1, true))
 assert(report:find("match=true", 1, true))
 local stance = frame()

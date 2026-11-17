@@ -9,31 +9,46 @@ local function profiles()
     return addon.db.rotationProfiles
 end
 
+-- Migrate a saved entry from the old single-condition format to the new multi-condition format.
+local function migrateEntry(entry)
+    if type(entry) == "string" then
+        return { ability = entry, conditions = {} }
+    end
+    if type(entry) == "table" and entry.condition and not entry.conditions then
+        local conditions = entry.condition.type ~= "always" and { entry.condition } or {}
+        return { ability = entry.ability, conditions = conditions }
+    end
+    return entry
+end
+
 function addon.SupportsComboPointConditions()
     local _, class = UnitClass("player")
     return not issecretvalue(class) and (class == "ROGUE" or class == "DRUID")
 end
 
 function addon.CopyRotationEntry(entry)
-    if type(entry) ~= "table" then return entry end
-    return { ability = entry.ability, condition = addon.CopyCondition(entry.condition) }
+    entry = migrateEntry(entry)
+    local conditions = {}
+    for i, c in ipairs(entry.conditions or {}) do conditions[i] = addon.CopyCondition(c) end
+    return { ability = entry.ability, conditions = conditions }
 end
 
 function addon.RotationDraftChanged(profile, draft)
     if #draft ~= #profile.abilities then return true end
     for i, entry in ipairs(draft) do
-        local saved = profile.abilities[i]
-        local name = type(entry) == "table" and entry.ability or entry
-        local savedName = type(saved) == "table" and saved.ability or saved
-        if trim(name) ~= trim(savedName) then return true end
-        local condition = type(entry) == "table" and entry.condition
-        local savedCondition = type(saved) == "table" and saved.condition
-        local kind = condition and condition.type or "always"
-        local savedKind = savedCondition and savedCondition.type or "always"
-        if kind ~= savedKind then return true end
-        if addon.ConditionIsNumeric(kind) then
-            if tonumber(condition.value) ~= tonumber(savedCondition.value) then return true end
-            if addon.ConditionOperator(condition) ~= addon.ConditionOperator(savedCondition) then return true end
+        local saved = migrateEntry(profile.abilities[i])
+        local name = trim(type(entry) == "table" and entry.ability or entry)
+        if name ~= trim(saved.ability) then return true end
+        local dc = type(entry) == "table" and entry.conditions or {}
+        local sc = saved.conditions or {}
+        if #dc ~= #sc then return true end
+        for j, condition in ipairs(dc) do
+            local savedCondition = sc[j]
+            if condition.type ~= savedCondition.type then return true end
+            if addon.ConditionIsNumeric(condition.type) then
+                if tonumber(condition.value) ~= tonumber(savedCondition.value) then return true end
+                if addon.ConditionOperator(condition) ~= addon.ConditionOperator(savedCondition) then return true end
+            end
         end
     end
     return false
@@ -46,7 +61,6 @@ end
 local function toggleState(ability)
     local ok, info = pcall(C_Spell.GetSpellInfo, tonumber(ability) or ability)
     if not ok or issecretvalue(info) or type(info) ~= "table" then return nil end
-    -- Prefer the stance bar's active flag for forms/Stealth, even if hidden.
     if StanceBar and StanceBar.actionButtons then
         for slot, button in pairs(StanceBar.actionButtons) do
             local formOK, _, active, _, id = pcall(GetShapeshiftFormInfo, button.index or slot)
@@ -139,6 +153,65 @@ function addon.EvaluateRotationCondition(condition, ability)
     return addon.CompareCondition(points, condition)
 end
 
+-- Evaluate all conditions for a rotation entry. Returns true/false/nil.
+function addon.EvaluateRotationEntry(entry, targetReady)
+    entry = migrateEntry(entry)
+    local ability = entry.ability
+    local conditions = entry.conditions or {}
+
+    -- Determine if any condition makes this row target-independent.
+    local independent = false
+    for _, c in ipairs(conditions) do
+        if c.type == "inRange" then independent = false; break end
+        if c.type == "noTarget" or c.type == "healthPercent" or c.type == "healthNumber"
+            or c.type == "manaPercent" or c.type == "ragePercent" or c.type == "energyPercent"
+            or c.type == "buffRemaining" or c.type == "shootToggle"
+            or c.type == "shootToggleOn" or c.type == "shootToggleOff" then
+            independent = true
+        end
+    end
+
+    if not targetReady and not independent then return false end
+    if #conditions == 0 then return true end -- no conditions = always
+
+    local result = true
+    for _, c in ipairs(conditions) do
+        local r = addon.EvaluateRotationCondition(c, ability)
+        if r == nil then return nil end -- wait, don't skip
+        if r == false then result = false end
+    end
+    return result
+end
+
+function addon.RotationEntryIsTargetIndependent(entry)
+    entry = migrateEntry(entry)
+    local conditions = entry.conditions or {}
+    for _, c in ipairs(conditions) do
+        if c.type == "inRange" then return false end
+    end
+    for _, c in ipairs(conditions) do
+        if c.type == "noTarget" or c.type == "healthPercent" or c.type == "healthNumber"
+            or c.type == "manaPercent" or c.type == "ragePercent" or c.type == "energyPercent"
+            or c.type == "buffRemaining" or c.type == "shootToggle"
+            or c.type == "shootToggleOn" or c.type == "shootToggleOff" then
+            return true
+        end
+    end
+    return false
+end
+
+function addon.RotationEntryIsShootRow(entry)
+    entry = migrateEntry(entry)
+    for _, c in ipairs(entry.conditions or {}) do
+        if c.type == "shootToggle" or c.type == "shootToggleOff" then return true end
+    end
+    return false
+end
+
+function addon.GetMigratedEntry(entry)
+    return migrateEntry(entry)
+end
+
 function addon.AddRotationProfile(name)
     name = trim(name)
     if name == "" then return nil, "Enter a profile name." end
@@ -152,17 +225,17 @@ end
 
 function addon.SaveRotationProfile(profile, abilities, skipRefresh)
     local saved = {}
-    for i, ability in ipairs(abilities) do
-        local conditional = type(ability) == "table"
-        local name = trim(conditional and ability.ability or ability)
+    for i, entry in ipairs(abilities) do
+        entry = migrateEntry(entry)
+        local name = trim(entry.ability or "")
         if name == "" then return false, "Enter an ability name in row " .. i .. "." end
-        if conditional then
-            local condition, message = addon.ValidateCondition(ability.condition)
-            if not condition then return false, message .. " (row " .. i .. ")." end
-            saved[i] = { ability = name, condition = condition }
-        else
-            saved[i] = name
+        local conditions = {}
+        for j, condition in ipairs(entry.conditions or {}) do
+            local normalized, message = addon.ValidateCondition(condition)
+            if not normalized then return false, message .. " (row " .. i .. ")." end
+            conditions[j] = normalized
         end
+        saved[i] = { ability = name, conditions = conditions }
     end
     profile.abilities = saved
     if not skipRefresh and addon.UpdateRotationHighlights then addon.UpdateRotationHighlights() end
@@ -211,19 +284,16 @@ function addon.CreateRotationsSettings(parent)
     local cancel = button(form, "Cancel", 90)
     cancel:SetPoint("LEFT", create, "RIGHT", 8, 0)
     form:Hide()
-    local notice = root:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    notice:SetPoint("TOPLEFT", 16, -82)
-    notice:SetText("Choose a condition for each ability. Numeric conditions support comparison operators.")
     local activeMessage = root:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    activeMessage:SetPoint("TOPLEFT", 16, -108)
-    activeMessage:SetPoint("TOPRIGHT", -34, -108)
+    activeMessage:SetPoint("TOPLEFT", 16, -82)
+    activeMessage:SetPoint("TOPRIGHT", -34, -82)
     activeMessage:SetJustifyH("LEFT")
     activeMessage:SetTextColor(0.1, 1, 0.1)
     local heading = root:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    heading:SetPoint("TOPLEFT", activeMessage, "BOTTOMLEFT", 0, -12)
+    heading:SetPoint("TOPLEFT", activeMessage, "BOTTOMLEFT", 0, -8)
     heading:SetText("Profiles")
     local scroll = CreateFrame("ScrollFrame", nil, root, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -12)
+    scroll:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -8)
     scroll:SetPoint("BOTTOMRIGHT", -34, 12)
     local content = CreateFrame("Frame", nil, scroll)
     content:SetSize(450, 1)
@@ -235,11 +305,140 @@ function addon.CreateRotationsSettings(parent)
     local editors = {}
     local layout
     local function updateDraftStatus(editor)
-        editor.status:SetText(addon.RotationDraftChanged(editor.profile, editor.draft) and "Unsaved changes." or "")
+        local changed = addon.RotationDraftChanged(editor.profile, editor.draft)
+        editor.status:SetText(changed and "Unsaved changes." or "")
     end
+
+    -- Creates a condition row within an ability panel.
+    local function createConditionRow(panel, condIdx)
+        local row = CreateFrame("Frame", nil, panel.body)
+        row:SetHeight(28)
+        row.controls = addon.CreateConditionControls(row,
+            function() return panel.conditions[condIdx] end,
+            function(condition)
+                panel.conditions[condIdx] = condition
+                updateDraftStatus(panel.editor)
+            end,
+            function() updateDraftStatus(panel.editor) end,
+            function() layout() end)
+        row.controls:SetPoint("LEFT")
+        local del = button(row, "Delete", 70)
+        del:SetPoint("RIGHT")
+        del:SetScript("OnClick", function()
+            table.remove(panel.conditions, condIdx)
+            updateDraftStatus(panel.editor)
+            layout()
+        end)
+        panel.condRows[condIdx] = row
+        return row
+    end
+
+    -- Creates a collapsible ability panel inside a profile editor.
+    local function createAbilityPanel(editor, abilityIdx)
+        local panel = {
+            editor = editor,
+            index = abilityIdx,
+            expanded = false,
+            condRows = {},
+        }
+        -- Seed conditions from the draft entry.
+        local entry = migrateEntry(editor.draft[abilityIdx])
+        panel.conditions = {}
+        for i, c in ipairs(entry.conditions or {}) do panel.conditions[i] = addon.CopyCondition(c) end
+
+        panel.frame = CreateFrame("Frame", nil, editor.body)
+        -- Panel header: row number + ability name + up/down/delete.
+        panel.header = button(panel.frame, "")
+        panel.header:SetPoint("TOPLEFT")
+        panel.header:SetPoint("TOPRIGHT", panel.frame, "TOPRIGHT", -170, 0)
+        panel.up = CreateFrame("Button", nil, panel.frame, "UIPanelScrollUpButtonTemplate")
+        panel.up:SetSize(24, 24)
+        panel.up:SetPoint("TOPRIGHT", panel.frame, "TOPRIGHT", -134, -4)
+        panel.down = CreateFrame("Button", nil, panel.frame, "UIPanelScrollDownButtonTemplate")
+        panel.down:SetSize(24, 24)
+        panel.down:SetPoint("LEFT", panel.up, "RIGHT", 4, 0)
+        panel.delete = button(panel.frame, "Delete", 70)
+        panel.delete:SetPoint("TOPRIGHT", panel.frame, "TOPRIGHT", 0, -2)
+
+        -- Panel body (shown when expanded).
+        panel.body = CreateFrame("Frame", nil, panel.frame)
+        panel.body:SetPoint("TOPLEFT", 8, -34)
+        panel.body:SetPoint("BOTTOMRIGHT", 0, 0)
+
+        -- Ability name input.
+        local abilityLabel = panel.body:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        abilityLabel:SetPoint("TOPLEFT", 0, -8)
+        abilityLabel:SetText("Ability:")
+        panel.input = CreateFrame("EditBox", nil, panel.body, "InputBoxTemplate")
+        panel.body.input = panel.input -- exposed for testing
+        panel.input:SetPoint("LEFT", abilityLabel, "RIGHT", 8, 0)
+        panel.input:SetSize(200, 24)
+        panel.input:SetAutoFocus(false)
+        panel.input:SetMaxLetters(100)
+        panel.input:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        panel.input:SetScript("OnTextChanged", function(self, userInput)
+            if not userInput then return end
+            local entry2 = migrateEntry(editor.draft[panel.index])
+            entry2.ability = self:GetText()
+            editor.draft[panel.index] = entry2
+            updateDraftStatus(editor)
+        end)
+
+        -- Add condition button.
+        panel.addCondition = button(panel.body, "Add condition", 130)
+        panel.addCondition:SetPoint("TOPLEFT", 0, -40)
+        panel.addCondition:SetScript("OnClick", function()
+            panel.conditions[#panel.conditions + 1] = { type = "inRange" }
+            local entry2 = migrateEntry(editor.draft[panel.index])
+            entry2.conditions = panel.conditions
+            editor.draft[panel.index] = entry2
+            updateDraftStatus(editor)
+            layout()
+        end)
+
+        panel.header:SetScript("OnClick", function()
+            panel.expanded = not panel.expanded
+            layout()
+        end)
+        panel.up:SetScript("OnClick", function()
+            local idx = panel.index
+            local other = idx - 1
+            if other < 1 then return end
+            editor.draft[idx], editor.draft[other] = editor.draft[other], editor.draft[idx]
+            editor.panels[idx], editor.panels[other] = editor.panels[other], editor.panels[idx]
+            editor.panels[idx].index, editor.panels[other].index = idx, other
+            updateDraftStatus(editor)
+            layout()
+        end)
+        panel.down:SetScript("OnClick", function()
+            local idx = panel.index
+            local other = idx + 1
+            if other > #editor.draft then return end
+            editor.draft[idx], editor.draft[other] = editor.draft[other], editor.draft[idx]
+            editor.panels[idx], editor.panels[other] = editor.panels[other], editor.panels[idx]
+            editor.panels[idx].index, editor.panels[other].index = idx, other
+            updateDraftStatus(editor)
+            layout()
+        end)
+        panel.delete:SetScript("OnClick", function()
+            panel.frame:Hide()
+            local idx = panel.index
+            table.remove(editor.draft, idx)
+            table.remove(editor.panels, idx)
+            for i = idx, #editor.panels do editor.panels[i].index = i end
+            updateDraftStatus(editor)
+            layout()
+        end)
+
+        editor.panels[abilityIdx] = panel
+        return panel
+    end
+
     local function addEditor(profile)
-        local editor = { profile = profile, draft = {}, rows = {}, expanded = false }
-        for i, ability in ipairs(profile.abilities) do editor.draft[i] = addon.CopyRotationEntry(ability) end
+        local editor = { profile = profile, draft = {}, panels = {}, expanded = false }
+        for i, ability in ipairs(profile.abilities) do
+            editor.draft[i] = addon.CopyRotationEntry(ability)
+        end
         editor.frame = CreateFrame("Frame", nil, content)
         editor.header = button(editor.frame, "+ " .. profile.name)
         editor.header:SetPoint("TOPLEFT")
@@ -257,97 +456,55 @@ function addon.CreateRotationsSettings(parent)
         editor.body = CreateFrame("Frame", nil, editor.frame)
         editor.body:SetPoint("TOPLEFT", 8, -32)
         editor.body:SetPoint("BOTTOMRIGHT")
-        editor.add = button(editor.body, "Add ability")
-        editor.add:SetPoint("TOPLEFT")
+        editor.body.editorRef = editor -- exposed for testing
+
+        editor.addAbility = button(editor.body, "Add ability")
+        editor.addAbility:SetPoint("TOPLEFT")
+
         editor.status = editor.body:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         editor.save = button(editor.body, "Save", 100)
         editor.status:SetPoint("LEFT", editor.save, "RIGHT", 12, 0)
-        editor.status:SetWidth(280)
+        editor.status:SetWidth(260)
         editor.status:SetJustifyH("LEFT")
-        editor.add:SetScript("OnClick", function()
-            editor.draft[#editor.draft + 1] = { ability = "", condition = { type = "inRange" } }
+
+        editor.addAbility:SetScript("OnClick", function()
+            local idx = #editor.draft + 1
+            editor.draft[idx] = { ability = "", conditions = {} }
+            local panel = createAbilityPanel(editor, idx)
+            panel.expanded = true
             updateDraftStatus(editor)
             layout()
-            editor.rows[#editor.draft].input:SetFocus()
+            panel.input:SetFocus()
         end)
         editor.save:SetScript("OnClick", function()
+            -- Sync panel conditions back into draft before saving.
+            for i, panel in ipairs(editor.panels) do
+                local entry2 = migrateEntry(editor.draft[i])
+                entry2.conditions = panel.conditions
+                editor.draft[i] = entry2
+            end
             local ok, message = addon.SaveRotationProfile(profile, editor.draft)
             editor.status:SetText(message)
             if ok then
-                for i, ability in ipairs(profile.abilities) do editor.draft[i] = addon.CopyRotationEntry(ability) end
+                -- Reload draft from the freshly saved profile without rebuilding panel frames,
+                -- so expansion state and condRows are preserved.
+                for i, ability in ipairs(profile.abilities) do
+                    editor.draft[i] = addon.CopyRotationEntry(ability)
+                    if editor.panels[i] then
+                        local e = migrateEntry(ability)
+                        editor.panels[i].conditions = {}
+                        for j, c in ipairs(e.conditions or {}) do
+                            editor.panels[i].conditions[j] = addon.CopyCondition(c)
+                        end
+                    end
+                end
                 layout()
             end
         end)
-        editors[#editors + 1] = editor
-    end
 
-    local function createRow(editor, index)
-        local row = CreateFrame("Frame", nil, editor.body)
-        row:SetHeight(28)
-        row.index = index
-        row.number = row:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        row.number:SetPoint("TOPLEFT", 0, -6)
-        row.number:SetWidth(26)
-        row.delete = button(row, "Delete", 60)
-        row.delete:SetPoint("TOPRIGHT", -4, -2)
-        row.down = CreateFrame("Button", nil, row, "UIPanelScrollDownButtonTemplate")
-        row.down:SetSize(24, 24)
-        row.down:SetPoint("RIGHT", row.delete, "LEFT", -6, 0)
-        row.up = CreateFrame("Button", nil, row, "UIPanelScrollUpButtonTemplate")
-        row.up:SetSize(24, 24)
-        row.up:SetPoint("RIGHT", row.down, "LEFT", -6, 0)
-        row.input = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
-        row.input:SetPoint("LEFT", row.number, "RIGHT", 8, 0)
-        row.input:SetPoint("RIGHT", row.up, "LEFT", -12, 0)
-        row.input:SetHeight(24)
-        row.input:SetAutoFocus(false)
-        row.input:SetMaxLetters(100)
-        row.input:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-        row.input:SetScript("OnTextChanged", function(self, userInput)
-            if userInput then
-                local entry = editor.draft[index]
-                if type(entry) == "table" then entry.ability = self:GetText()
-                else editor.draft[index] = self:GetText() end
-                updateDraftStatus(editor)
-            end
-        end)
-        row.conditionLabel = row:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-        row.conditionLabel:SetPoint("TOPLEFT", 34, -36)
-        row.conditionLabel:SetText("Condition:")
-        row.conditionControls = addon.CreateConditionControls(row,
-            function()
-                local entry = editor.draft[index]
-                return type(entry) == "table" and entry.condition or { type = "always" }
-            end,
-            function(condition)
-                local entry = editor.draft[index]
-                local ability = type(entry) == "table" and entry.ability or entry
-                if condition.type == "always" then editor.draft[index] = ability
-                else editor.draft[index] = { ability = ability, condition = condition } end
-            end,
-            function() updateDraftStatus(editor) end, function() layout() end)
-        row.conditionControls:SetPoint("LEFT", row.conditionLabel, "RIGHT", 8, 0)
-        row.conditionType = row.conditionControls.dropdown
-        row.threshold = row.conditionControls.value
-        local function move(delta)
-            local other = index + delta
-            if other < 1 or other > #editor.draft then return end
-            for _, entry in ipairs(editor.rows) do entry.input:ClearFocus(); entry.threshold:ClearFocus() end
-            editor.draft[index], editor.draft[other] = editor.draft[other], editor.draft[index]
-            updateDraftStatus(editor)
-            layout()
-        end
-        row.up:SetScript("OnClick", function() move(-1) end)
-        row.down:SetScript("OnClick", function() move(1) end)
-        row.delete:SetScript("OnClick", function()
-            if index > #editor.draft then return end
-            for _, entry in ipairs(editor.rows) do entry.input:ClearFocus(); entry.threshold:ClearFocus() end
-            table.remove(editor.draft, index)
-            updateDraftStatus(editor)
-            layout()
-        end)
-        editor.rows[index] = row
-        return row
+        -- Build initial panels.
+        for i in ipairs(editor.draft) do createAbilityPanel(editor, i) end
+        editors[#editors + 1] = editor
     end
 
     layout = function()
@@ -355,9 +512,19 @@ function addon.CreateRotationsSettings(parent)
         activeMessage:SetText(activeProfile and ("Active profile: " .. activeProfile.name) or "No active rotation profile.")
         local y = 0
         for _, editor in ipairs(editors) do
-            local rowsHeight = 0
-            for _ in ipairs(editor.draft) do rowsHeight = rowsHeight + 68 end
-            local height = editor.expanded and (104 + rowsHeight) or 32
+            -- Calculate total body height.
+            local panelsHeight = 0
+            for _, panel in ipairs(editor.panels) do
+                if panel.expanded then
+                    panelsHeight = panelsHeight + 144 + #panel.conditions * 34
+                else
+                    panelsHeight = panelsHeight + 32
+                end
+                panelsHeight = panelsHeight + 4
+            end
+            local bodyHeight = 36 + panelsHeight + 36
+            local height = editor.expanded and (32 + bodyHeight) or 32
+
             editor.frame:ClearAllPoints()
             editor.frame:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
             editor.frame:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -y)
@@ -367,25 +534,56 @@ function addon.CreateRotationsSettings(parent)
             editor.activate:SetText(active and "Active" or "Activate")
             editor.activate:SetEnabled(not active)
             editor.body:SetShown(editor.expanded)
-            for i = #editor.draft + 1, #editor.rows do editor.rows[i]:Hide() end
+
             if editor.expanded then
-                local rowY = 32
-                for i, ability in ipairs(editor.draft) do
-                    local row = editor.rows[i] or createRow(editor, i)
-                    local conditional = type(ability) == "table"
-                    row:SetPoint("TOPLEFT", editor.body, "TOPLEFT", 0, -rowY)
-                    row:SetPoint("TOPRIGHT", editor.body, "TOPRIGHT", 0, -rowY)
-                    row:SetHeight(62)
-                    row.number:SetText(i .. ".")
-                    row.input:SetText(conditional and ability.ability or ability)
-                    row.conditionControls:Refresh()
-                    row.up:SetEnabled(i > 1)
-                    row.down:SetEnabled(i < #editor.draft)
-                    row:Show()
-                    rowY = rowY + 68
+                local panelY = 36
+                for i, panel in ipairs(editor.panels) do
+                    local entry = migrateEntry(editor.draft[i])
+                    local abilityName = trim(entry.ability or "")
+                    local condCount = #panel.conditions
+                    local label = (abilityName ~= "" and abilityName or "New ability")
+                        .. (condCount > 0 and (" (" .. condCount .. " condition" .. (condCount == 1 and "" or "s") .. ")") or "")
+                    panel.header:SetText((panel.expanded and "- " or "+ ") .. i .. ". " .. label)
+                    panel.up:SetEnabled(i > 1)
+                    panel.down:SetEnabled(i < #editor.panels)
+
+                    local panelHeight
+                    if panel.expanded then
+                        panelHeight = 144 + #panel.conditions * 34
+                    else
+                        panelHeight = 32
+                    end
+                    panel.frame:ClearAllPoints()
+                    panel.frame:SetPoint("TOPLEFT", editor.body, "TOPLEFT", 0, -panelY)
+                    panel.frame:SetPoint("TOPRIGHT", editor.body, "TOPRIGHT", 0, -panelY)
+                    panel.frame:SetHeight(panelHeight)
+                    panel.body:SetShown(panel.expanded)
+                    panel.frame:Show()
+
+                    if panel.expanded then
+                        panel.input:SetText(entry.ability or "")
+                        -- Hide extra condition rows.
+                        for j = #panel.conditions + 1, #panel.condRows do
+                            if panel.condRows[j] then panel.condRows[j]:Hide() end
+                        end
+                        -- Show/create condition rows.
+                        local condY = -74
+                        for j in ipairs(panel.conditions) do
+                            local row = panel.condRows[j] or createConditionRow(panel, j)
+                            row:SetPoint("TOPLEFT", panel.body, "TOPLEFT", 0, condY)
+                            row:SetPoint("TOPRIGHT", panel.body, "TOPRIGHT", 0, condY)
+                            row.controls:Refresh()
+                            row:Show()
+                            condY = condY - 34
+                        end
+                        panel.addCondition:ClearAllPoints()
+                        panel.addCondition:SetPoint("TOPLEFT", panel.body, "TOPLEFT", 0, condY - 4)
+                    end
+
+                    panelY = panelY + panelHeight + 4
                 end
                 editor.save:ClearAllPoints()
-                editor.save:SetPoint("TOPLEFT", editor.body, "TOPLEFT", 0, -40 - rowsHeight)
+                editor.save:SetPoint("TOPLEFT", editor.body, "TOPLEFT", 0, -(36 + panelsHeight + 4))
             end
             y = y + height + 8
         end
@@ -398,11 +596,13 @@ function addon.CreateRotationsSettings(parent)
     name:SetScript("OnEscapePressed", cancelCreate)
     local function createProfile()
         local profile, message = addon.AddRotationProfile(name:GetText())
-        if not profile then notice:SetText(message); return end
+        if not profile then
+            activeMessage:SetText(message)
+            return
+        end
         addEditor(profile)
         name:SetText("")
         cancelCreate()
-        notice:SetText("Profile created. Select it below to add abilities.")
         layout()
     end
     create:SetScript("OnClick", createProfile)
