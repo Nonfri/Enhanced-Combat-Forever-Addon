@@ -91,6 +91,8 @@ function addon.EvaluateRotationCondition(condition, ability)
     if condition.type == "always" then return true end
     if condition.type == "buffRemaining" then return addon.EvaluateBuffRemainingCondition(condition, ability) end
     if condition.type == "shootToggle" then return true end
+    -- Ordering conditions: logic handled in RotationHighlights; passthrough here.
+    if condition.type == "runAfterPrevious" or condition.type == "mustRunBeforeNext" then return true end
     if condition.type == "shootToggleOn" or condition.type == "shootToggleOff" then
         local active = addon.IsAutoRepeatActive and addon.IsAutoRepeatActive() or false
         if condition.type == "shootToggleOn" then return not active end
